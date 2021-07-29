@@ -441,3 +441,32 @@ detekt {
 shot {
     showOnlyFailingTestsInReports = ciBuild
 }
+
+task runUnitTestandGenerateCSV() {
+    dependsOn 'testGenericDebugUnitTest'
+    dependsOn 'testQaDebugUnitTest'
+    def output = file("build/reports/summary.csv")
+    doLast {
+        println "Collecting results into CSV file"
+        file("build/reports").mkdirs()
+        output.text = '"Test","Result","Duration"\r\n'
+        allprojects.each { project2 ->
+            println "Processing project ${project2.name}"
+            def totalTime = 0.000
+            def resultFiles = project2.fileTree("build") { include '**/TEST-*.xml' }
+            resultFiles.each { file ->
+                println "Processing report ${file}"
+                def testsuite = new XmlSlurper().parse(file)
+                testsuite.testcase.each { testcase ->
+                    def result = "pass"
+                    if (!testcase.failure.isEmpty()) { result = "fail" }
+                    else if (!testcase.skipped.isEmpty()) { result = "skipped" }
+                    output << "\"${testcase.@classname}.${testcase.@name}\",\"${result}\",\"${testcase.@time}\"\r\n"
+                    totalTime = totalTime.plus(Double.valueOf(testcase.@time.text()))
+                }
+            }
+            totalTime = Math.round(totalTime)
+            output << "Total execution time,\"\", \"${totalTime}\"\r\n "
+        }
+    }
+}
